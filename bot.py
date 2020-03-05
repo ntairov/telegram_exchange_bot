@@ -1,29 +1,21 @@
-import logging
-
 import datetime
-
-import aiohttp
-
-from aiogram import Bot, Dispatcher, executor, types
-from aiogram.utils.markdown import text, bold, code
-
-from flag import flagize
-
-from flags import new_flags, keys
-
+import logging
+import os
 from pathlib import Path
 
+import aiohttp
+from aiogram import Bot, Dispatcher, executor, types
+from aiogram.utils.markdown import text, bold, code
+from flag import flagize
+
 from db import session as db_session, Currency, User, Base, engine
-
 from draw_chart import draw_time_series
-
-import os
+from flags import new_flags, keys
 
 API_TOKEN = os.environ['TELEGRAM_TOKEN']
-
+PROXY_URL = 'http://51.158.114.177:8811'
 URL = 'https://api.exchangeratesapi.io/'
 
-PROXY_URL = 'http://51.158.114.177:8811'
 logging.basicConfig(level=logging.INFO)
 
 bot = Bot(token=API_TOKEN, proxy=PROXY_URL)
@@ -44,6 +36,11 @@ async def show_available_commands(message: types.Message):
                code('/history USD/CAD'), sep='\n')
 
     await message.reply(msg, parse_mode=types.ParseMode.MARKDOWN)
+
+
+async def retrieve_currency(url, session):
+    async with session.get(url) as response:
+        return await response.json()
 
 
 @dp.message_handler(commands=['list', 'lst'])
@@ -82,11 +79,6 @@ async def show_currency(message):
     else:
         query = db_session.query(Currency.currencies).filter(Currency.chat_id == message.chat.id).first()
         await bot.send_message(message.chat.id, text(*query, sep='\n'), parse_mode=types.ParseMode.MARKDOWN)
-
-
-async def retrieve_currency(url, session):
-    async with session.get(url) as response:
-        return await response.json()
 
 
 @dp.message_handler(commands=['exchange'])
@@ -149,7 +141,8 @@ async def draw_chart(message):
                     fetch_currencies = await response.json()
                     if not fetch_currencies['rates']:
                         await bot.send_message(message.chat.id,
-                                               text(bold('No exchange rate data is available for the selected currency.')),
+                                               text(bold(
+                                                   'No exchange rate data is available for the selected currency.')),
                                                parse_mode=types.ParseMode.MARKDOWN)
                     else:
                         get_plot = draw_time_series(fetch_currencies['rates'])
@@ -162,6 +155,7 @@ async def draw_chart(message):
         await bot.send_message(message.chat.id, text(bold("Invalid format should be:"),
                                                      code("/history USD/CAD\nor\n/history USD/RUB"),
                                                      sep='\n'), parse_mode=types.ParseMode.MARKDOWN)
+
 
 if __name__ == '__main__':
     if not Path('currencies.db').exists():
